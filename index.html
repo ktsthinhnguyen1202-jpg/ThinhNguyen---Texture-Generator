@@ -106,7 +106,7 @@
         <h2>Cài đặt Vật liệu</h2>
         
         <div class="control-group">
-            <label for="imageUpload">Tải ảnh vân (Gỗ/Đá):</label>
+            <label for="imageUpload">Tải ảnh vân (Gỗ/Đá/Bê tông):</label>
             <input type="file" id="imageUpload" accept="image/*">
         </div>
 
@@ -129,7 +129,7 @@
                 <div class="custom-select-trigger">
                     <div class="selected-content">
                         <svg class="pattern-icon" viewBox="0 0 24 24"><path d="M0 6h24M0 12h24M0 18h24M12 0v6M6 6v6M18 6v6M12 12v6M6 18v6M18 18v6"/></svg>
-                        <span>So le 1/2 (Stretcher)</span>
+                        <span>So le 1/2 (Running Bond)</span>
                     </div>
                     <div class="arrow"></div>
                 </div>
@@ -176,22 +176,22 @@
         <div class="control-group row-inputs">
             <div>
                 <label for="brickWidth" id="lblWidth">Dài 1 viên (mm):</label>
-                <input type="number" id="brickWidth" value="400" min="10">
+                <input type="number" id="brickWidth" value="400" min="1">
             </div>
             <div>
                 <label for="brickHeight" id="lblHeight">Rộng 1 viên (mm):</label>
-                <input type="number" id="brickHeight" value="100" min="10">
+                <input type="number" id="brickHeight" value="100" min="1">
             </div>
         </div>
 
         <div class="control-group row-inputs">
             <div>
                 <label for="cols">Số cột / Block:</label>
-                <input type="number" id="cols" value="4" min="1">
+                <input type="number" id="cols" value="4" min="1" max="50">
             </div>
             <div>
                 <label for="rows">Số hàng / Block:</label>
-                <input type="number" id="rows" value="8" min="1">
+                <input type="number" id="rows" value="8" min="1" max="50">
             </div>
         </div>
 
@@ -238,7 +238,7 @@
                 currentPattern = option.getAttribute('data-value');
                 trigger.querySelector('.selected-content').innerHTML = option.innerHTML;
                 wrapper.classList.remove('open');
-                generateTexture();
+                triggerRender();
             });
         });
 
@@ -247,6 +247,7 @@
         const inputs = document.querySelectorAll('input:not([type="file"])');
         
         let uploadedImage = null;
+        let imgPatternCache = null; 
         let randomMap = []; 
 
         function shuffleMap() {
@@ -255,7 +256,7 @@
                 flipX: Math.random() > 0.5 ? 1 : -1, flipY: Math.random() > 0.5 ? 1 : -1,
                 tone: Math.random()
             }));
-            if(ctx) generateTexture();
+            if(ctx) triggerRender();
         }
         shuffleMap();
 
@@ -268,7 +269,8 @@
                 img.onload = function() {
                     uploadedImage = img;
                     document.getElementById('imageControls').style.display = 'block';
-                    generateTexture(); 
+                    imgPatternCache = null; 
+                    triggerRender(); 
                 }
                 img.src = event.target.result;
             }
@@ -277,46 +279,49 @@
 
         function clearImage() {
             uploadedImage = null;
+            imgPatternCache = null;
             document.getElementById('imageUpload').value = '';
             document.getElementById('imageControls').style.display = 'none';
-            generateTexture();
+            triggerRender();
         }
 
-        function drawBrick(x, y, w, h, r, c, isVertical = false) {
+        let renderTimeout;
+        function triggerRender() {
+            clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(generateTexture, 150); 
+        }
+
+        function drawPolyBrick(pts, x, y, w, h, randIdx, rotAngle = 0) {
             const toneVar = parseFloat(document.getElementById('toneVar').value) / 100;
             const doRandomUV = document.getElementById('randomizeUV').checked;
-            const randIdx = Math.abs(r * 113 + c * 37);
             const rand = randomMap[randIdx % randomMap.length];
             const uvRand = doRandomUV ? rand : { rx: 0.5, ry: 0.5, flipX: 1, flipY: 1 };
 
             ctx.save();
             ctx.beginPath();
-            ctx.rect(x, y, w, h);
+            ctx.moveTo(x + pts[0][0], y + pts[0][1]);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(x + pts[i][0], y + pts[i][1]);
+            ctx.closePath();
             ctx.clip(); 
 
-            if (uploadedImage) {
+            if (uploadedImage && imgPatternCache) {
                 const globalRot = parseFloat(document.getElementById('imgRotation').value) * Math.PI / 180;
                 const scale = parseFloat(document.getElementById('imgScale').value);
-                const rotAngle = isVertical ? (Math.PI / 2) : 0;
                 
-                ctx.save();
                 ctx.translate(x + w / 2, y + h / 2);
                 ctx.rotate(globalRot + rotAngle);
                 ctx.scale(scale * uvRand.flipX, scale * uvRand.flipY);
 
-                let rectW = isVertical ? h : w; 
-                let rectH = isVertical ? w : h;
-                let scaleCover = Math.max(rectW / uploadedImage.width, rectH / uploadedImage.height);
+                let diag = Math.sqrt(w*w + h*h);
+                let scaleCover = Math.max(diag / uploadedImage.width, diag / uploadedImage.height);
                 ctx.scale(scaleCover, scaleCover);
 
                 if (doRandomUV) ctx.translate(uvRand.rx * uploadedImage.width, uvRand.ry * uploadedImage.height);
                 else ctx.translate(-uploadedImage.width / 2, -uploadedImage.height / 2);
 
-                const pattern = ctx.createPattern(uploadedImage, 'repeat');
-                ctx.fillStyle = pattern;
+                ctx.fillStyle = imgPatternCache;
                 const dim = 4000 / (scale * scaleCover + 0.001);
                 ctx.fillRect(-dim, -dim, dim * 2, dim * 2);
-                ctx.restore();
             } else {
                 ctx.fillRect(x - w, y - h, w * 3, h * 3);
             }
@@ -329,15 +334,24 @@
             ctx.restore();
         }
 
+        function drawBrick(x, y, w, h, r, c, isVertical = false) {
+            let pts = [[0,0], [w,0], [w,h], [0,h]];
+            drawPolyBrick(pts, x, y, w, h, Math.abs(r * 113 + c * 37), isVertical ? Math.PI / 2 : 0);
+        }
+
         function generateTexture() {
-            const brickWidth_mm = parseFloat(document.getElementById('brickWidth').value) || 1;
-            const brickHeight_mm = parseFloat(document.getElementById('brickHeight').value) || 1;
-            const cols = parseInt(document.getElementById('cols').value) || 1;
-            const rows = parseInt(document.getElementById('rows').value) || 1;
-            const joint_mm = parseFloat(document.getElementById('joint').value) || 0;
+            const brickWidth_mm = Math.max(1, parseFloat(document.getElementById('brickWidth').value) || 400);
+            const brickHeight_mm = Math.max(1, parseFloat(document.getElementById('brickHeight').value) || 100);
+            const cols = Math.max(1, Math.min(50, parseInt(document.getElementById('cols').value) || 4)); 
+            const rows = Math.max(1, Math.min(50, parseInt(document.getElementById('rows').value) || 8)); 
+            const joint_mm = Math.max(0, parseFloat(document.getElementById('joint').value) || 0);
             const brickColor = document.getElementById('brickColor').value;
             const jointColor = document.getElementById('jointColor').value;
             
+            if (uploadedImage && !imgPatternCache) {
+                imgPatternCache = ctx.createPattern(uploadedImage, 'repeat');
+            }
+
             let totalW_mm, totalH_mm;
             
             if (currentPattern === 'kubb') {
@@ -361,10 +375,10 @@
             const maxRes = 1500; 
             if (totalW_mm > totalH_mm) {
                 canvas.width = maxRes;
-                canvas.height = Math.round(maxRes * (totalH_mm / totalW_mm));
+                canvas.height = Math.max(1, Math.round(maxRes * (totalH_mm / totalW_mm)));
             } else {
                 canvas.height = maxRes;
-                canvas.width = Math.round(maxRes * (totalW_mm / totalH_mm));
+                canvas.width = Math.max(1, Math.round(maxRes * (totalW_mm / totalH_mm)));
             }
 
             const px_per_mm = canvas.width / totalW_mm;
@@ -415,10 +429,11 @@
                 let dy = brickH + joint;
                 let dy_N = dy * N;
                 
-                let extN = Math.ceil(Math.max(w, h) / Math.min(brickW, brickH)) + 5;
+                let extI = cols + 4;
+                let extJ = Math.ceil(rows / N) + 4;
                 
-                for (let i = -extN; i <= extN; i++) {
-                    for (let j = -extN; j <= extN; j++) {
+                for (let i = -extI; i <= extI; i++) {
+                    for (let j = -extJ; j <= extJ; j++) {
                         let h_x = i * dx - j * dy_N;
                         let h_y = i * dx + j * dy_N;
                         
@@ -460,7 +475,7 @@
             link.click();
         }
 
-        inputs.forEach(input => input.addEventListener('input', generateTexture));
+        inputs.forEach(input => input.addEventListener('input', triggerRender));
         setTimeout(generateTexture, 100);
     </script>
 </body>
