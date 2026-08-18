@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free Seamless Texture Generator - V6</title>
+    <style>
+        body {
+            display: flex;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #fff;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 340px;
+            background-color: #2d2d2d;
+            padding: 25px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+        .sidebar h2 { margin-top: 0; font-size: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; color: #ccc; }
+        .row-inputs { display: flex; gap: 10px; }
+        .row-inputs > div { flex: 1; }
+        input[type="number"], input[type="file"] {
+            width: 100%; box-sizing: border-box; padding: 8px;
+            background: #444; border: 1px solid #555; color: white; border-radius: 4px;
+        }
+        input[type="range"] {
+            width: 100%; box-sizing: border-box; cursor: pointer;
+        }
+        input[type="file"] { font-size: 12px; cursor: pointer; }
+        input[type="color"] {
+            width: 100%; height: 35px; border: none; border-radius: 4px; cursor: pointer;
+            background: none;
+        }
+        button {
+            width: 100%; padding: 12px; background-color: #4CAF50; color: white;
+            border: none; border-radius: 4px; font-size: 16px; font-weight: bold;
+            cursor: pointer; transition: background 0.3s; margin-top: 5px;
+        }
+        button:hover { background-color: #45a049; }
+        .btn-clear { background-color: #e74c3c; padding: 10px; font-size: 14px; margin-top: 15px; }
+        .btn-clear:hover { background-color: #c0392b; }
+        .btn-shuffle { background-color: #3498db; padding: 8px; font-size: 13px; margin-top: 10px; }
+        .btn-shuffle:hover { background-color: #2980b9; }
+        .info-box {
+            background: #1a1a1a; padding: 12px; border-radius: 4px; border-left: 4px solid #3498db;
+            margin-bottom: 15px; font-size: 13px; color: #ddd; line-height: 1.5;
+        }
+        .preview-area {
+            flex-grow: 1; display: flex; justify-content: center; align-items: center;
+            background-color: #121212; background-image: radial-gradient(#333 1px, transparent 1px);
+            background-size: 20px 20px; padding: 20px; overflow: hidden;
+        }
+        canvas {
+            background-color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            max-width: 100%; max-height: 90vh; object-fit: contain;
+        }
+        #imageControls {
+            display: none; background: #222; padding: 15px; border-radius: 6px; 
+            border: 1px solid #444; margin-bottom: 15px;
+        }
+        .val-display { color: #4CAF50; font-weight: bold; }
+        .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; color: #fff;}
+        .checkbox-label input { width: 16px; height: 16px; cursor: pointer; }
+        .divider { border-top: 1px solid #444; margin: 15px 0; }
+        .highlight { color: #e67e22; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Cài đặt Vật liệu</h2>
+        
+        <div class="control-group">
+            <label for="imageUpload">Tải ảnh vân (Gỗ/Đá/Bê tông):</label>
+            <input type="file" id="imageUpload" accept="image/*">
+        </div>
+
+        <!-- Bảng điều khiển nâng cao cho ảnh -->
+        <div id="imageControls">
+            <label for="imgRotation">Xoay vân ảnh: <span id="rotVal" class="val-display">0</span>°</label>
+            <input type="range" id="imgRotation" min="0" max="360" value="0" oninput="document.getElementById('rotVal').innerText=this.value">
+            
+            <label for="imgScale" style="margin-top: 12px;">Phóng to / Thu nhỏ: <span id="scaleVal" class="val-display">1.0</span>x</label>
+            <input type="range" id="imgScale" min="0.1" max="5" step="0.1" value="1" oninput="document.getElementById('scaleVal').innerText=this.value">
+            
+            <div class="divider"></div>
+            
+            <label class="checkbox-label">
+                <input type="checkbox" id="randomizeUV" checked> 
+                Ngẫu nhiên vị trí vân (Random Map)
+            </label>
+            <button id="clearImageBtn" class="btn-clear" onclick="clearImage()">🗑️ Xóa ảnh, dùng màu trơn</button>
+        </div>
+
+        <div class="control-group">
+            <label for="toneVar">Độ lệch Sáng/Tối (Tone Variation): <span id="toneVal" class="highlight">15</span>%</label>
+            <input type="range" id="toneVar" min="0" max="100" value="15" oninput="document.getElementById('toneVal').innerText=this.value">
+        </div>
+
+        <button class="btn-shuffle" style="margin-bottom: 15px;" onclick="shuffleMap()">🔀 Trộn lại vân & màu ngẫu nhiên</button>
+
+        <div class="control-group row-inputs">
+            <div>
+                <label for="brickWidth">Dài 1 viên (mm):</label>
+                <input type="number" id="brickWidth" value="200" min="10">
+            </div>
+            <div>
+                <label for="brickHeight">Rộng 1 viên (mm):</label>
+                <input type="number" id="brickHeight" value="100" min="10">
+            </div>
+        </div>
+
+        <div class="control-group row-inputs">
+            <div>
+                <label for="cols">Số cột:</label>
+                <input type="number" id="cols" value="4" min="1">
+            </div>
+            <div>
+                <label for="rows">Số hàng:</label>
+                <input type="number" id="rows" value="8" min="1">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label for="joint">Độ dày mạch / ron (mm):</label>
+            <input type="number" id="joint" value="5" min="0">
+        </div>
+
+        <div class="control-group row-inputs">
+            <div>
+                <label for="brickColor">Màu nền viên:</label>
+                <input type="color" id="brickColor" value="#8b5a2b">
+            </div>
+            <div>
+                <label for="jointColor">Màu mạch:</label>
+                <input type="color" id="jointColor" value="#dcdcdc">
+            </div>
+        </div>
+
+        <div class="info-box" id="totalSizeInfo">
+            Đang tính toán kích thước...
+        </div>
+
+        <button onclick="downloadTexture()">⬇️ Tải Map (PNG)</button>
+    </div>
+
+    <div class="preview-area">
+        <canvas id="textureCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('textureCanvas');
+        const ctx = canvas.getContext('2d');
+        const inputs = document.querySelectorAll('input:not([type="file"])');
+        
+        let uploadedImage = null;
+        let randomMap = []; 
+
+        function shuffleMap() {
+            randomMap = Array.from({length: 2000}, () => ({
+                rx: Math.random(), 
+                ry: Math.random(), 
+                flipX: Math.random() > 0.5 ? 1 : -1, 
+                flipY: Math.random() > 0.5 ? 1 : -1,
+                tone: Math.random() // Biến số tạo độ sáng/tối
+            }));
+            generateTexture();
+        }
+        
+        shuffleMap();
+
+        document.getElementById('imageUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    uploadedImage = img;
+                    document.getElementById('imageControls').style.display = 'block';
+                    generateTexture(); 
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        });
+
+        function clearImage() {
+            uploadedImage = null;
+            document.getElementById('imageUpload').value = '';
+            document.getElementById('imageControls').style.display = 'none';
+            generateTexture();
+        }
+
+        function drawBrick(x, y, w, h, r, c) {
+            const toneVar = parseFloat(document.getElementById('toneVar').value) / 100;
+            const doRandomUV = document.getElementById('randomizeUV').checked;
+
+            // Lấy object ngẫu nhiên dựa trên tọa độ r (hàng) và c (cột)
+            const randIdx = Math.abs(r * 113 + c * 37) % randomMap.length;
+            const rand = randomMap[randIdx];
+            const uvRand = doRandomUV ? rand : { rx: 0.5, ry: 0.5, flipX: 1, flipY: 1 };
+
+            if (uploadedImage) {
+                const rot = parseFloat(document.getElementById('imgRotation').value) * Math.PI / 180;
+                const scale = parseFloat(document.getElementById('imgScale').value);
+
+                ctx.save();
+                
+                // 1. Cắt viền
+                ctx.beginPath();
+                ctx.rect(x, y, w, h);
+                ctx.clip();
+
+                // 2. Dời tọa độ vào giữa viên
+                ctx.translate(x + w / 2, y + h / 2);
+                ctx.rotate(rot);
+                ctx.scale(scale * uvRand.flipX, scale * uvRand.flipY);
+
+                // 3. Scale hình ảnh để luôn phủ kín bề mặt (Tương tự object-fit: cover)
+                let scaleCover = Math.max(w / uploadedImage.width, h / uploadedImage.height);
+                ctx.scale(scaleCover, scaleCover);
+
+                // 4. Dời vị trí vân ảnh (Pan). Thuật toán repeat Pattern cho phép dời thoải mái.
+                if (doRandomUV) {
+                    ctx.translate(uvRand.rx * uploadedImage.width, uvRand.ry * uploadedImage.height);
+                } else {
+                    ctx.translate(-uploadedImage.width / 2, -uploadedImage.height / 2); // Căn giữa nếu ko random
+                }
+
+                // Vẽ bằng Pattern (Lặp lại vô hạn) để vân không bao giờ bị hụt viền
+                const pattern = ctx.createPattern(uploadedImage, 'repeat');
+                ctx.fillStyle = pattern;
+                
+                const dim = 4000 / (scale * scaleCover + 0.001); // Kích thước phủ lớn
+                ctx.fillRect(-dim, -dim, dim * 2, dim * 2);
+
+                ctx.restore();
+            } else {
+                ctx.fillRect(x, y, w, h);
+            }
+
+            // 5. Vẽ Tone Variation (Áp dụng cho cả ảnh tải lên và màu trơn)
+            if (toneVar > 0) {
+                let brightness = (rand.tone - 0.5) * 2 * toneVar; // từ -toneVar đến +toneVar
+                if (brightness > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${brightness * 0.4})`; // Sáng lên
+                } else {
+                    ctx.fillStyle = `rgba(0, 0, 0, ${-brightness * 0.6})`; // Tối đi
+                }
+                ctx.fillRect(x, y, w, h);
+            }
+        }
+
+        function generateTexture() {
+            const brickWidth_mm = parseFloat(document.getElementById('brickWidth').value) || 1;
+            const brickHeight_mm = parseFloat(document.getElementById('brickHeight').value) || 1;
+            const cols = parseInt(document.getElementById('cols').value) || 1;
+            const rows = parseInt(document.getElementById('rows').value) || 1;
+            const joint_mm = parseFloat(document.getElementById('joint').value) || 0;
+            const brickColor = document.getElementById('brickColor').value;
+            const jointColor = document.getElementById('jointColor').value;
+            
+            const totalW_mm = cols * (brickWidth_mm + joint_mm);
+            const totalH_mm = rows * (brickHeight_mm + joint_mm);
+
+            document.getElementById('totalSizeInfo').innerHTML = 
+                `Kích thước map xuất ra:<br>
+                 <strong style="font-size: 16px; color: #4CAF50;">${totalW_mm} mm × ${totalH_mm} mm</strong>`;
+
+            const maxRes = 1500; 
+            if (totalW_mm > totalH_mm) {
+                canvas.width = maxRes;
+                canvas.height = Math.round(maxRes * (totalH_mm / totalW_mm));
+            } else {
+                canvas.height = maxRes;
+                canvas.width = Math.round(maxRes * (totalW_mm / totalH_mm));
+            }
+
+            const px_per_mm = canvas.width / totalW_mm;
+            const brickW = brickWidth_mm * px_per_mm;
+            const brickH = brickHeight_mm * px_per_mm;
+            const joint = joint_mm * px_per_mm;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Nền (mạch vữa)
+            ctx.fillStyle = jointColor;
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.fillStyle = brickColor;
+
+            // Vẽ gạch
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let offset = (r % 2 === 0) ? 0 : (brickW + joint) / 2;
+                    let x = c * (brickW + joint) - offset;
+                    let y = r * (brickH + joint);
+
+                    drawBrick(x, y, brickW, brickH, r, c);
+
+                    // Xử lý tràn viền Seamless
+                    if (x < 0) {
+                        drawBrick(x + w, y, brickW, brickH, r, c);
+                    }
+                    if (x + brickW > w) {
+                        drawBrick(x - w, y, brickW, brickH, r, c);
+                    }
+                }
+            }
+        }
+
+        function downloadTexture() {
+            const link = document.createElement('a');
+            link.download = uploadedImage ? 'custom_texture_with_image.png' : 'my_custom_texture.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        inputs.forEach(input => input.addEventListener('input', generateTexture));
+        generateTexture();
+    </script>
+</body>
+</html>
